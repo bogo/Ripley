@@ -24,8 +24,8 @@ Ripley passes the source as-is to the `eval` method of your choosing. The trigge
 
 For example:
 ```
-> def {fun} (\ {args body} {**\**
-  def (head args) (\ (tail args) body)**\**
+> def {fun} (\ {args body} { \
+  def (head args) (\ (tail args) body) \
 })
 ```
 
