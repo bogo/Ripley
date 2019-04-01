@@ -2,9 +2,16 @@ import Foundation
 import UIKit
 import PlaygroundSupport
 
+// MARK: - Result
+public enum RipleyResult {
+    case success(String)
+    case failure(String)
+}
+
 // MARK: - Engine
 public protocol RipleyEngine {
-    func eval(_ expr: String) -> String
+    var insert: (RipleyResult) -> Void { get set }
+    func eval(_ expr: String) -> RipleyResult
 }
 
 // MARK: - Theme
@@ -14,15 +21,18 @@ public struct RipleyTheme {
     let prompt: String
     let backgroundColor: UIColor
     let textColor: UIColor
+    let errorColor: UIColor
     let font: UIFont
     
     public init(prompt: String,
                 backgroundColor: UIColor,
                 textColor: UIColor,
+                errorColor: UIColor,
                 font: UIFont) {
          self.prompt = prompt
          self.backgroundColor = backgroundColor
          self.textColor = textColor
+         self.errorColor = errorColor
          self.font = font
     }
     
@@ -30,6 +40,7 @@ public struct RipleyTheme {
         return self.init(prompt: "> ",
                     backgroundColor: UIColor.black,
                     textColor: UIColor.white, 
+                    errorColor: UIColor.red,
                     font: UIFont(name: "Menlo", size: 12)!)
     }
 }
@@ -114,7 +125,7 @@ protocol RipleyHistorySource {
 
 public class RipleyViewController: UIViewController {
     let theme: RipleyTheme
-    let engine: RipleyEngine
+    var engine: RipleyEngine
     
     let textView = RipleyTextView()
     var readOnlyRange: Range<String.Index>
@@ -141,7 +152,8 @@ public class RipleyViewController: UIViewController {
         textView.readOnlyRange = readOnlyRange
         
         super.init(nibName: nil, bundle: nil)
-        
+
+        self.engine.insert = { self.insert(result: $0) }
         textView.historySource = self
     }
     
@@ -159,7 +171,9 @@ public class RipleyViewController: UIViewController {
         textView.text = theme.prompt
         
         textView.textContainer.lineBreakMode = .byCharWrapping
+        textView.spellCheckingType = .no
         textView.smartQuotesType = .no
+        textView.smartDashesType = .no
         textView.autocorrectionType = .no
         textView.delegate = self
         
@@ -193,6 +207,36 @@ public class RipleyViewController: UIViewController {
         return inputString
     }
     
+    public func insert(result: RipleyResult) {        
+        let mutableString = textView.attributedText.mutableCopy() as! NSMutableAttributedString
+        let stringToInsert = addAttributes(to: result)
+        mutableString.append(stringToInsert)
+        textView.attributedText = mutableString as NSAttributedString
+        textView.text += "\n"
+    }
+    
+    func addAttributes(to result: RipleyResult) -> NSAttributedString {
+        switch result {
+        case .success(let result):
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font : theme.font,
+                .foregroundColor : theme.textColor,
+            ]
+
+            return NSAttributedString(string: result,
+                                      attributes: attributes)
+            
+        case .failure(let error):
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font : theme.font,
+                .foregroundColor : theme.errorColor,
+            ]
+
+            return NSAttributedString(string: error,
+                                      attributes: attributes)
+        }
+    }
+    
     func handleInput() {
         textView.text += "\n"
         
@@ -204,13 +248,12 @@ public class RipleyViewController: UIViewController {
         }
         
         inputHistory.append(input)
-        textView.text += engine.eval(input)
-        textView.text += "\n"
+        insert(result: engine.eval(input))
         
         textView.text += theme.prompt
         readOnlyRange = calculateReadOnlyRange(in: textView.text)
         textView.readOnlyRange = readOnlyRange
-    }
+    }    
 }
 
 extension RipleyViewController: RipleyHistorySource {
